@@ -90,6 +90,25 @@ class Doctrine_Locking_Manager_Pessimistic
     }
 
     /**
+     * Create a unique key for the record based on the primary key values
+     *
+     * @param  Doctrine_Record  $record
+     * @return string 
+     */
+    private function _getUniqueKey(Doctrine_Record $record)
+    {
+        $fields = (array) $record->getTable()->getIdentifier();
+
+        $key = '';
+        foreach ($fields as $field) {
+            $value = $record->get($field);
+            $key = sprintf('%s|%s:%s', $key, $field, base64_encode($value));
+        }
+
+        return sha1($key);
+    }
+
+    /**
      * Obtains a lock on a {@link Doctrine_Record}
      *
      * @param  Doctrine_Record $record     The record that has to be locked
@@ -101,15 +120,10 @@ class Doctrine_Locking_Manager_Pessimistic
     public function getLock(Doctrine_Record $record, $userIdent)
     {
         $objectType = $record->getTable()->getComponentName();
-        $key        = $record->getTable()->getIdentifier();
+        $key        = $this->_getUniqueKey($record);
 
         $gotLock = false;
         $time = time();
-
-        if (is_array($key)) {
-            // Composite key
-            $key = implode('|', $key);
-        }
 
         try {
             $dbh = $this->conn->getDbh();
@@ -170,12 +184,7 @@ class Doctrine_Locking_Manager_Pessimistic
     public function releaseLock(Doctrine_Record $record, $userIdent)
     {
         $objectType = $record->getTable()->getComponentName();
-        $key        = $record->getTable()->getIdentifier();
-
-        if (is_array($key)) {
-            // Composite key
-            $key = implode('|', $key);
-        }
+        $key        = $this->_getUniqueKey($record);
 
         try {
             $dbh = $this->conn->getDbh();
@@ -206,11 +215,6 @@ class Doctrine_Locking_Manager_Pessimistic
      */
     private function _getLockingUserIdent($objectType, $key)
     {
-        if (is_array($key)) {
-            // Composite key
-            $key = implode('|', $key);
-        }
-
         try {
             $dbh = $this->conn->getDbh();
             $stmt = $dbh->prepare('SELECT user_ident FROM ' . $this->_lockTable
@@ -241,7 +245,7 @@ class Doctrine_Locking_Manager_Pessimistic
     public function getLockOwner($lockedRecord)
     {
         $objectType = $lockedRecord->getTable()->getComponentName();
-        $key        = $lockedRecord->getTable()->getIdentifier();
+        $key        = $this->_getUniqueKey($lockedRecord);
         return $this->_getLockingUserIdent($objectType, $key);
     }
 
